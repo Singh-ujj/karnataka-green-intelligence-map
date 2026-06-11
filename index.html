@@ -265,26 +265,49 @@ input:checked + .slider:before { transform: translateX(16px); }
 let map, districtData, talukData;
 let currentLevel = 'district';
 let currentDistrict = null;
-let currentDistrictCode = null;
+let currentDistrictCodes = []; // array because some districts have border taluks
 let showTooltip = true;
 let popup = new maplibregl.Popup({ closeButton: true, closeOnClick: false, maxWidth: '320px' });
 
-// KGISDistri = '01','02'... exact 2-digit string
-const DIST_CODE_TO_NAME = {
-  '01':'Belgaum',   '02':'Bijapur',         '03':'Bagalkot',
-  '04':'Dharwad',   '05':'Gadag',           '06':'Haveri',
-  '07':'Uttar Kannand','08':'Bellary',       '09':'Koppal',
-  '10':'Raichur',   '11':'Gulbarga',        '12':'Bidar',
-  '13':'Yadgir',    '14':'Davanagere',      '15':'Shimoga',
-  '16':'Chikmagalur','17':'Tumkur',         '18':'Chitradurga',
-  '19':'Kolar',     '20':'Bangalore Urban', '21':'Bangalore Rural',
-  '22':'Mandya',    '23':'Mysore',          '24':'Chamrajnagar',
-  '25':'Kodagu',    '26':'Hassan',          '27':'Dakshin Kannad',
-  '28':'Udupi',     '29':'Chikkaballapur',  '30':'Yadgir'
+// EXACT mapping from spatial join output
+// ADM2_NAME (district GeoJSON) → KGISDistri codes (taluk GeoJSON)
+const DIST_NAME_TO_CODES = {
+  'Bagalkot':         ['02'],
+  'Bangalore Rural':  ['21'],
+  'Bangalore Urban':  ['20'],
+  'Belgaum':          ['01'],
+  'Bellary':          ['12'],
+  'Bidar':            ['05'],
+  'Bijapur':          ['03'],
+  'Chamrajnagar':     ['27'],
+  'Chikmagalur':      ['17'],
+  'Chitradurga':      ['13'],
+  'Dakshin Kannad':   ['24'],
+  'Davanagere':       ['14'],
+  'Dharwad':          ['09'],
+  'Gadag':            ['08'],
+  'Gulbarga':         ['04'],
+  'Hassan':           ['23'],
+  'Haveri':           ['11'],
+  'Kodagu':           ['25'],
+  'Kolar':            ['19'],
+  'Koppal':           ['07'],
+  'Mandya':           ['22'],
+  'Mysore':           ['26'],
+  'Raichur':          ['06'],
+  'Shimoga':          ['15'],
+  'Tumkur':           ['18'],
+  'Udupi':            ['16'],
+  'Uttar Kannand':    ['10'],
+  'Chikkaballapur':   ['29'],
+  'Yadgir':           ['30'],
 };
 
-const DIST_NAME_TO_CODE = {};
-Object.entries(DIST_CODE_TO_NAME).forEach(([k,v]) => DIST_NAME_TO_CODE[v] = k);
+// Reverse: code → name
+const DIST_CODE_TO_NAME = {};
+Object.entries(DIST_NAME_TO_CODES).forEach(([name, codes]) => {
+  codes.forEach(c => { DIST_CODE_TO_NAME[c] = name; });
+});
 
 function getDistrictName(code) {
   return DIST_CODE_TO_NAME[String(code)] || String(code);
@@ -315,12 +338,6 @@ async function loadData() {
   ]);
   districtData = await dRes.json();
   talukData    = await tRes.json();
-  
-  // Log sample to verify format
-  if (talukData.features.length > 0) {
-    console.log('Sample KGISDistri:', talukData.features[0].properties.KGISDistri);
-    console.log('Type:', typeof talukData.features[0].properties.KGISDistri);
-  }
 }
 
 function initMap() {
@@ -413,8 +430,8 @@ function addDistrictLayer() {
     if (currentLevel!=='district') return;
     const p = e.features[0].properties;
     currentDistrict = p.ADM2_NAME;
-    currentDistrictCode = DIST_NAME_TO_CODE[p.ADM2_NAME] || null;
-    console.log('Clicked district:', currentDistrict, '→ code:', currentDistrictCode);
+    currentDistrictCodes = DIST_NAME_TO_CODES[p.ADM2_NAME] || [];
+    console.log('Clicked:', currentDistrict, '→ codes:', currentDistrictCodes);
     popup.remove();
     zoomToDistrict(e.features[0]);
   });
@@ -441,21 +458,20 @@ function zoomToDistrict(feature) {
 function showTalukLayer() {
   removeTalukLayer();
 
-  console.log('Filtering taluks for district code:', currentDistrictCode);
+  console.log('Filtering taluks for codes:', currentDistrictCodes);
 
-  // EXACT STRING MATCH - KGISDistri is '01','02' etc
   const filtered = {
     type: 'FeatureCollection',
     features: talukData.features.filter(f => {
-      const dc = f.properties.KGISDistri;
-      return String(dc) === String(currentDistrictCode);
+      const dc = String(f.properties.KGISDistri);
+      return currentDistrictCodes.includes(dc);
     })
   };
 
   console.log('Taluks found:', filtered.features.length);
 
   if (filtered.features.length === 0) {
-    console.warn('No taluks found! Check district code mapping.');
+    console.warn('No taluks found for codes:', currentDistrictCodes);
     return;
   }
 
@@ -538,7 +554,7 @@ function removeTalukLayer() {
 function goBack() {
   currentLevel = 'district';
   currentDistrict = null;
-  currentDistrictCode = null;
+  currentDistrictCodes = [];
   removeTalukLayer();
   popup.remove();
   document.getElementById('back-btn').style.display = 'none';
@@ -560,7 +576,7 @@ function populateDistrictDropdown() {
     const val = sel.value;
     if (!val) { goBack(); return; }
     currentDistrict = val;
-    currentDistrictCode = DIST_NAME_TO_CODE[val] || null;
+    currentDistrictCodes = DIST_NAME_TO_CODES[val] || [];
     if (currentLevel==='taluk') { removeTalukLayer(); currentLevel='district'; }
     const feat = districtData.features.find(f=>f.properties.ADM2_NAME===val);
     if (feat) zoomToDistrict(feat);
@@ -591,13 +607,13 @@ function setupTalukSearch() {
 
     box.querySelectorAll('.taluk-suggestion').forEach(item => {
       item.addEventListener('click',() => {
-        const name    = item.dataset.name;
-        const distCode = item.dataset.dist;
-        input.value   = name;
+        const name     = item.dataset.name;
+        const distCode = String(item.dataset.dist);
+        input.value    = name;
         box.style.display = 'none';
 
-        currentDistrictCode = String(distCode);
-        currentDistrict = getDistrictName(distCode);
+        currentDistrict      = getDistrictName(distCode);
+        currentDistrictCodes = [distCode];
 
         if (currentLevel==='taluk') { removeTalukLayer(); currentLevel='district'; }
 
