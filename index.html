@@ -1,0 +1,781 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Karnataka Green Intelligence Map</title>
+<link href="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.css" rel="stylesheet">
+<script src="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.js"></script>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: 'Segoe UI', sans-serif; background: #0a1628; color: #e0f2fe; display: flex; height: 100vh; overflow: hidden; }
+
+/* SIDEBAR */
+#sidebar {
+  width: 280px; min-width: 280px;
+  background: linear-gradient(180deg, #0d2137 0%, #0a1628 100%);
+  border-right: 1px solid #1e4d6b;
+  display: flex; flex-direction: column;
+  z-index: 10; overflow-y: auto;
+}
+#sidebar::-webkit-scrollbar { width: 4px; }
+#sidebar::-webkit-scrollbar-track { background: #0a1628; }
+#sidebar::-webkit-scrollbar-thumb { background: #1e4d6b; border-radius: 4px; }
+
+#sidebar-header {
+  background: linear-gradient(135deg, #0d7a4e, #0891b2);
+  padding: 16px; text-align: center; flex-shrink: 0;
+}
+#sidebar-header h1 { font-size: 13px; font-weight: 700; color: #fff; line-height: 1.4; }
+#sidebar-header p  { font-size: 10px; color: #bae6fd; margin-top: 4px; }
+
+.sidebar-section { padding: 12px; border-bottom: 1px solid #1e3a4f; }
+
+.sidebar-section label {
+  font-size: 10px; color: #7dd3fc; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.6px;
+  display: block; margin-bottom: 7px;
+}
+
+select {
+  width: 100%; padding: 7px 10px;
+  background: #0d2137; border: 1px solid #1e4d6b;
+  color: #e0f2fe; border-radius: 6px; font-size: 12px; cursor: pointer;
+}
+select:focus { outline: none; border-color: #0891b2; }
+
+input[type="text"] {
+  width: 100%; padding: 7px 10px;
+  background: #0d2137; border: 1px solid #1e4d6b;
+  color: #e0f2fe; border-radius: 6px; font-size: 12px;
+}
+input[type="text"]::placeholder { color: #4a7a94; }
+input[type="text"]:focus { outline: none; border-color: #0891b2; }
+
+/* SUGGESTIONS DROPDOWN */
+#taluk-suggestions {
+  background: #0d2137; border: 1px solid #1e4d6b;
+  border-radius: 6px; margin-top: 4px;
+  max-height: 160px; overflow-y: auto; display: none;
+}
+#taluk-suggestions::-webkit-scrollbar { width: 3px; }
+#taluk-suggestions::-webkit-scrollbar-thumb { background: #1e4d6b; }
+
+.taluk-suggestion {
+  padding: 7px 10px; font-size: 12px; color: #e0f2fe;
+  cursor: pointer; border-bottom: 1px solid #1e3a4f;
+  display: flex; justify-content: space-between; align-items: center;
+  transition: background 0.15s;
+}
+.taluk-suggestion:last-child { border-bottom: none; }
+.taluk-suggestion:hover { background: #1e3a4f; }
+.taluk-suggestion .dist-tag { font-size: 10px; color: #7dd3fc; }
+
+/* TAGS */
+.tags { display: flex; flex-wrap: wrap; gap: 5px; }
+.tag {
+  padding: 3px 9px; border-radius: 12px; font-size: 11px;
+  cursor: pointer; border: 1px solid transparent;
+  transition: all 0.2s; user-select: none; font-weight: 500;
+}
+.tag.active  { opacity: 1; }
+.tag.inactive { opacity: 0.3; }
+.tag-critical { background: #7f1d1d; border-color: #ef4444; color: #fca5a5; }
+.tag-poor     { background: #78350f; border-color: #f97316; color: #fdba74; }
+.tag-moderate { background: #1e3a5f; border-color: #3b82f6; color: #93c5fd; }
+.tag-good     { background: #14532d; border-color: #22c55e; color: #86efac; }
+.tag-high     { background: #7f1d1d; border-color: #ef4444; color: #fca5a5; }
+.tag-low      { background: #14532d; border-color: #22c55e; color: #86efac; }
+
+/* TOGGLES */
+.toggle-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.toggle-row:last-child { margin-bottom: 0; }
+.toggle-row span { font-size: 12px; color: #bae6fd; }
+.toggle { position: relative; width: 36px; height: 20px; flex-shrink: 0; }
+.toggle input { opacity: 0; width: 0; height: 0; }
+.slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background: #1e3a4f; border-radius: 20px; transition: 0.3s; }
+.slider:before { position: absolute; content: ""; height: 14px; width: 14px; left: 3px; bottom: 3px; background: white; border-radius: 50%; transition: 0.3s; }
+input:checked + .slider { background: #0891b2; }
+input:checked + .slider:before { transform: translateX(16px); }
+
+/* LEGEND */
+.legend-item { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; font-size: 11px; color: #bae6fd; }
+.legend-dot { width: 12px; height: 12px; border-radius: 3px; flex-shrink: 0; }
+
+/* STATS */
+.stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.stat-box { background: #0d2137; border: 1px solid #1e4d6b; border-radius: 8px; padding: 8px; text-align: center; }
+.stat-box .val { font-size: 18px; font-weight: 700; color: #38bdf8; }
+.stat-box .lbl { font-size: 9px; color: #7dd3fc; margin-top: 2px; text-transform: uppercase; letter-spacing: 0.4px; }
+
+/* MAP CONTAINER */
+#map { flex: 1; position: relative; }
+
+/* POPUP */
+.maplibregl-popup-content {
+  background: rgba(10, 22, 40, 0.97) !important;
+  border: 1px solid #1e4d6b !important;
+  border-radius: 10px !important;
+  padding: 0 !important;
+  color: #e0f2fe !important;
+  min-width: 290px;
+  backdrop-filter: blur(10px);
+  box-shadow: 0 8px 32px rgba(0,0,0,0.6) !important;
+}
+.maplibregl-popup-tip { border-top-color: #1e4d6b !important; }
+.maplibregl-popup-close-button { color: #7dd3fc !important; font-size: 18px !important; padding: 8px 10px !important; z-index: 1; }
+
+.popup-header {
+  background: linear-gradient(135deg, #0d7a4e, #0891b2);
+  padding: 12px 36px 12px 14px; border-radius: 10px 10px 0 0;
+}
+.popup-header h3 { font-size: 15px; font-weight: 700; color: #fff; }
+.popup-header p  { font-size: 11px; color: #bae6fd; margin-top: 2px; }
+.popup-body { padding: 10px 14px; }
+
+.popup-row {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 4px 0; border-bottom: 1px solid #1a3347; font-size: 12px;
+}
+.popup-row:last-child { border-bottom: none; }
+.popup-row .key { color: #7dd3fc; }
+.popup-row .val { color: #f0f9ff; font-weight: 500; text-align: right; }
+
+.badge { padding: 2px 8px; border-radius: 10px; font-size: 10px; font-weight: 600; }
+.badge-good     { background: #14532d; color: #86efac; }
+.badge-moderate { background: #1e3a5f; color: #93c5fd; }
+.badge-poor     { background: #78350f; color: #fdba74; }
+.badge-critical { background: #7f1d1d; color: #fca5a5; }
+.badge-high     { background: #7f1d1d; color: #fca5a5; }
+.badge-low      { background: #14532d; color: #86efac; }
+
+.popup-hint {
+  text-align: center; padding: 7px 14px;
+  font-size: 10px; color: #4a7a94;
+  border-top: 1px solid #1e3a4f;
+  border-radius: 0 0 10px 10px;
+}
+
+/* LOADING SCREEN */
+#loading {
+  position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+  background: #0a1628; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; z-index: 9999;
+  transition: opacity 0.5s;
+}
+#loading h2 { color: #38bdf8; font-size: 22px; margin-bottom: 8px; margin-top: 16px; }
+#loading p  { color: #7dd3fc; font-size: 13px; }
+.loader {
+  width: 52px; height: 52px;
+  border: 3px solid #1e4d6b; border-top-color: #0891b2;
+  border-radius: 50%; animation: spin 1s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* LEVEL INDICATOR */
+#level-indicator {
+  position: absolute; top: 12px; left: 50%; transform: translateX(-50%);
+  background: rgba(10,22,40,0.92); border: 1px solid #1e4d6b;
+  border-radius: 20px; padding: 6px 18px; font-size: 12px; color: #7dd3fc;
+  z-index: 5; pointer-events: none; white-space: nowrap;
+}
+
+/* BACK BUTTON */
+#back-btn {
+  position: absolute; top: 12px; right: 12px;
+  background: linear-gradient(135deg, #0d7a4e, #0891b2);
+  border: none; color: white; padding: 8px 18px;
+  border-radius: 20px; font-size: 12px; cursor: pointer;
+  z-index: 5; display: none; font-weight: 600;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+}
+#back-btn:hover { opacity: 0.85; }
+
+/* HINT BOX */
+#hint-box {
+  position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%);
+  background: rgba(10,22,40,0.9); border: 1px solid #1e4d6b;
+  border-radius: 10px; padding: 8px 18px;
+  font-size: 11px; color: #7dd3fc;
+  z-index: 5; text-align: center; pointer-events: none;
+  white-space: nowrap;
+}
+</style>
+</head>
+<body>
+
+<!-- LOADING -->
+<div id="loading">
+  <div class="loader"></div>
+  <h2>🌿 Karnataka Green Intelligence Map</h2>
+  <p>Loading biodiversity data...</p>
+</div>
+
+<!-- SIDEBAR -->
+<div id="sidebar">
+  <div id="sidebar-header">
+    <h1>🌿 Karnataka Green Intelligence Map</h1>
+    <p>Taluk-wise Biodiversity Spatial Analysis</p>
+  </div>
+
+  <!-- Stats -->
+  <div class="sidebar-section">
+    <label>Overview</label>
+    <div class="stat-grid">
+      <div class="stat-box"><div class="val">27</div><div class="lbl">Districts</div></div>
+      <div class="stat-box"><div class="val">227</div><div class="lbl">Taluks</div></div>
+      <div class="stat-box"><div class="val" id="stat-good">-</div><div class="lbl">Good</div></div>
+      <div class="stat-box"><div class="val" id="stat-critical">-</div><div class="lbl">Critical</div></div>
+    </div>
+  </div>
+
+  <!-- District -->
+  <div class="sidebar-section">
+    <label>Select District</label>
+    <select id="district-select">
+      <option value="">All Districts</option>
+    </select>
+  </div>
+
+  <!-- Taluk Search -->
+  <div class="sidebar-section">
+    <label>Search Taluk</label>
+    <input type="text" id="taluk-search" placeholder="Type taluk name..." autocomplete="off">
+    <div id="taluk-suggestions"></div>
+  </div>
+
+  <!-- Map Indicator -->
+  <div class="sidebar-section">
+    <label>Map Indicator</label>
+    <select id="indicator-select">
+      <option value="Biodiversity_Health_Score">Biodiversity Health Score</option>
+      <option value="Biodiversity_Risk_Score">Biodiversity Risk Score</option>
+      <option value="Climate_Stress_Index">Climate Stress Index</option>
+      <option value="NDVI">NDVI</option>
+      <option value="ForestCover">Forest Cover</option>
+      <option value="Rainfall">Rainfall</option>
+      <option value="LST">Land Surface Temp</option>
+      <option value="NightLights">Night Lights</option>
+    </select>
+  </div>
+
+  <!-- Health Class -->
+  <div class="sidebar-section">
+    <label>Health Class</label>
+    <div class="tags">
+      <span class="tag tag-critical active" data-health="Critical">Critical ×</span>
+      <span class="tag tag-poor active" data-health="Poor">Poor ×</span>
+      <span class="tag tag-moderate active" data-health="Moderate">Moderate ×</span>
+      <span class="tag tag-good active" data-health="Good">Good ×</span>
+    </div>
+  </div>
+
+  <!-- Risk Class -->
+  <div class="sidebar-section">
+    <label>Risk Class</label>
+    <div class="tags">
+      <span class="tag tag-high active" data-risk="High">High ×</span>
+      <span class="tag tag-moderate active" data-risk="Moderate">Moderate ×</span>
+      <span class="tag tag-low active" data-risk="Low">Low ×</span>
+    </div>
+  </div>
+
+  <!-- Toggles -->
+  <div class="sidebar-section">
+    <div class="toggle-row">
+      <span>Show Boundaries</span>
+      <label class="toggle"><input type="checkbox" id="toggle-boundaries" checked><span class="slider"></span></label>
+    </div>
+    <div class="toggle-row">
+      <span>Show Tooltip</span>
+      <label class="toggle"><input type="checkbox" id="toggle-tooltip" checked><span class="slider"></span></label>
+    </div>
+  </div>
+
+  <!-- Legend -->
+  <div class="sidebar-section">
+    <label>Legend — Health Score</label>
+    <div class="legend-item"><div class="legend-dot" style="background:#15803d"></div>Good (≥ 60)</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#0891b2"></div>Moderate (40–60)</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#d97706"></div>Poor (20–40)</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#dc2626"></div>Critical (< 20)</div>
+  </div>
+</div>
+
+<!-- MAP -->
+<div id="map">
+  <div id="level-indicator">🌍 Karnataka Overview</div>
+  <button id="back-btn" onclick="goBack()">← Back to Districts</button>
+  <div id="hint-box">Hover over district • Click to explore taluks • Double-click to download</div>
+</div>
+
+<script>
+// ============================================
+// KARNATAKA GREEN INTELLIGENCE MAP
+// ============================================
+
+let map, districtData, talukData;
+let currentLevel = 'district';
+let currentDistrict = null;
+let activeHealthFilters = new Set(['Critical','Poor','Moderate','Good']);
+let activeRiskFilters   = new Set(['High','Moderate','Low']);
+let showTooltip = true;
+let popup = new maplibregl.Popup({ closeButton: true, closeOnClick: false, maxWidth: '320px' });
+
+// District number ↔ name maps
+const DIST_NUM_TO_NAME = {
+  1:'Belgaum', 2:'Bijapur', 3:'Bagalkot', 4:'Dharwad', 5:'Gadag',
+  6:'Haveri', 7:'Uttar Kannand', 8:'Bellary', 9:'Koppal', 10:'Raichur',
+  11:'Gulbarga', 12:'Bidar', 13:'Yadgir', 14:'Davanagere', 15:'Shimoga',
+  16:'Chikmagalur', 17:'Tumkur', 18:'Chitradurga', 19:'Kolar',
+  20:'Bangalore Urban', 21:'Bangalore Rural', 22:'Mandya', 23:'Mysore',
+  24:'Chamrajnagar', 25:'Kodagu', 26:'Hassan', 27:'Dakshin Kannad',
+  28:'Udupi', 29:'Chikkaballapur', 30:'Yadgir'
+};
+
+// Helpers
+function getDistrictName(num) { return DIST_NUM_TO_NAME[num] || 'Unknown'; }
+
+function getHealthColor(score) {
+  if (score === null || score === undefined || isNaN(score)) return '#334155';
+  if (score >= 60) return '#15803d';
+  if (score >= 40) return '#0891b2';
+  if (score >= 20) return '#d97706';
+  return '#dc2626';
+}
+
+function getBadgeClass(cls) {
+  if (!cls) return 'badge';
+  return 'badge badge-' + cls.toLowerCase();
+}
+
+function getBounds(geometry) {
+  let minLng = Infinity, minLat = Infinity, maxLng = -Infinity, maxLat = -Infinity;
+  function proc(c) {
+    if (typeof c[0] === 'number') {
+      minLng = Math.min(minLng, c[0]); maxLng = Math.max(maxLng, c[0]);
+      minLat = Math.min(minLat, c[1]); maxLat = Math.max(maxLat, c[1]);
+    } else { c.forEach(proc); }
+  }
+  proc(geometry.coordinates);
+  return [[minLng, minLat], [maxLng, maxLat]];
+}
+
+function fmt(val, dec=2) { return (parseFloat(val)||0).toFixed(dec); }
+
+// ---- LOAD DATA ----
+async function loadData() {
+  const [dRes, tRes] = await Promise.all([
+    fetch('karnataka_districts_final.geojson'),
+    fetch('karnataka_final.geojson')
+  ]);
+  districtData = await dRes.json();
+  talukData    = await tRes.json();
+}
+
+// ---- INIT MAP ----
+function initMap() {
+  map = new maplibregl.Map({
+    container: 'map',
+    style: {
+      version: 8,
+      sources: { 'osm': { type: 'raster', tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'], tileSize: 256 } },
+      layers: [{ id: 'osm', type: 'raster', source: 'osm', paint: { 'raster-opacity': 0.12 } }],
+      glyphs: 'https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf'
+    },
+    center: [20, 20], zoom: 1.5,
+    attributionControl: false
+  });
+
+  map.addControl(new maplibregl.NavigationControl(), 'bottom-right');
+
+  map.on('load', () => {
+    addDistrictLayer();
+    animateIntro();
+    populateDistrictDropdown();
+    updateStats();
+    setupTalukSearch();
+    setupFilters();
+    setupToggles();
+    document.getElementById('loading').style.opacity = '0';
+    setTimeout(() => document.getElementById('loading').style.display = 'none', 500);
+  });
+}
+
+// ---- INTRO ANIMATION ----
+function animateIntro() {
+  setTimeout(() => {
+    map.flyTo({ center: [75.5, 15.0], zoom: 6.3, duration: 3000, essential: true });
+  }, 600);
+}
+
+// ---- DISTRICT LAYER ----
+function addDistrictLayer() {
+  map.addSource('districts', { type: 'geojson', data: districtData });
+
+  map.addLayer({
+    id: 'districts-fill', type: 'fill', source: 'districts',
+    paint: {
+      'fill-color': [
+        'case',
+        ['>=', ['get', 'Biodiversity_Health_Score'], 60], '#15803d',
+        ['>=', ['get', 'Biodiversity_Health_Score'], 40], '#0891b2',
+        ['>=', ['get', 'Biodiversity_Health_Score'], 20], '#d97706',
+        '#dc2626'
+      ],
+      'fill-opacity': 0.72
+    }
+  });
+
+  map.addLayer({
+    id: 'districts-border', type: 'line', source: 'districts',
+    paint: { 'line-color': '#38bdf8', 'line-width': 1.5, 'line-opacity': 0.8 }
+  });
+
+  map.addLayer({
+    id: 'districts-hover', type: 'fill', source: 'districts',
+    paint: { 'fill-color': '#ffffff', 'fill-opacity': 0.12 },
+    filter: ['==', 'ADM2_NAME', '']
+  });
+
+  // Hover
+  map.on('mousemove', 'districts-fill', (e) => {
+    if (!showTooltip || currentLevel !== 'district') return;
+    map.getCanvas().style.cursor = 'pointer';
+    const p = e.features[0].properties;
+    map.setFilter('districts-hover', ['==', 'ADM2_NAME', p.ADM2_NAME]);
+    popup.setLngLat(e.lngLat).setHTML(`
+      <div class="popup-header">
+        <h3>📍 ${p.ADM2_NAME}</h3>
+        <p>Karnataka District</p>
+      </div>
+      <div class="popup-body">
+        <div class="popup-row"><span class="key">Health Score</span><span class="val">${fmt(p.Biodiversity_Health_Score)}</span></div>
+        <div class="popup-row"><span class="key">Health Class</span><span class="val"><span class="${getBadgeClass(p.Health_Class)}">${p.Health_Class||'N/A'}</span></span></div>
+        <div class="popup-row"><span class="key">Risk Class</span><span class="val"><span class="${getBadgeClass(p.Risk_Class)}">${p.Risk_Class||'N/A'}</span></span></div>
+        <div class="popup-row"><span class="key">Total Taluks</span><span class="val">${p.Total_Taluks||'N/A'}</span></div>
+        <div class="popup-row"><span class="key">Avg Rainfall</span><span class="val">${fmt(p.Rainfall,1)} mm</span></div>
+        <div class="popup-row"><span class="key">Avg NDVI</span><span class="val">${fmt(p.NDVI,3)}</span></div>
+        <div class="popup-row"><span class="key">Avg LST</span><span class="val">${fmt(p.LST,1)} °C</span></div>
+      </div>
+      <div class="popup-hint">🖱️ Click to explore taluks &nbsp;•&nbsp; Double-click to download</div>
+    `).addTo(map);
+  });
+
+  map.on('mouseleave', 'districts-fill', () => {
+    if (currentLevel !== 'district') return;
+    map.getCanvas().style.cursor = '';
+    map.setFilter('districts-hover', ['==', 'ADM2_NAME', '']);
+    popup.remove();
+  });
+
+  // Single click → zoom + show taluks
+  map.on('click', 'districts-fill', (e) => {
+    if (currentLevel !== 'district') return;
+    const feature = e.features[0];
+    currentDistrict = feature.properties.ADM2_NAME;
+    popup.remove();
+    zoomToDistrict(feature);
+  });
+
+  // Double click → download district CSV
+  map.on('dblclick', 'districts-fill', (e) => {
+    if (currentLevel !== 'district') return;
+    e.preventDefault();
+    downloadDistrictData(e.features[0].properties);
+  });
+}
+
+// ---- ZOOM TO DISTRICT ----
+function zoomToDistrict(feature) {
+  const bounds = getBounds(feature.geometry);
+  map.fitBounds(bounds, { padding: 60, duration: 1200 });
+  setTimeout(() => {
+    showTalukLayer();
+    document.getElementById('level-indicator').textContent = '📍 ' + currentDistrict + ' — Taluks';
+    document.getElementById('back-btn').style.display = 'block';
+    document.getElementById('hint-box').textContent = 'Hover taluk for data  •  Double-click to download CSV';
+    currentLevel = 'taluk';
+  }, 1300);
+}
+
+// ---- TALUK LAYER ----
+function showTalukLayer() {
+  removeTalukLayer();
+
+  const distNum = Object.entries(DIST_NUM_TO_NAME).find(([k,v]) => v === currentDistrict);
+  const dn = distNum ? parseInt(distNum[0]) : -1;
+
+  const filtered = {
+    type: 'FeatureCollection',
+    features: talukData.features.filter(f => parseInt(f.properties.KGISDistri) === dn)
+  };
+
+  map.addSource('taluks', { type: 'geojson', data: filtered });
+
+  map.addLayer({
+    id: 'taluks-fill', type: 'fill', source: 'taluks',
+    paint: {
+      'fill-color': [
+        'case',
+        ['>=', ['get', 'Biodiversity_Health_Score'], 60], '#15803d',
+        ['>=', ['get', 'Biodiversity_Health_Score'], 40], '#0891b2',
+        ['>=', ['get', 'Biodiversity_Health_Score'], 20], '#d97706',
+        '#dc2626'
+      ],
+      'fill-opacity': 0.78
+    }
+  });
+
+  map.addLayer({
+    id: 'taluks-border', type: 'line', source: 'taluks',
+    paint: { 'line-color': '#7dd3fc', 'line-width': 1, 'line-opacity': 0.9 }
+  });
+
+  map.addLayer({
+    id: 'taluks-hover', type: 'fill', source: 'taluks',
+    paint: { 'fill-color': '#ffffff', 'fill-opacity': 0.18 },
+    filter: ['==', 'KGISTalukN', '']
+  });
+
+  // Taluk hover
+  map.on('mousemove', 'taluks-fill', (e) => {
+    if (!showTooltip) return;
+    map.getCanvas().style.cursor = 'pointer';
+    const p = e.features[0].properties;
+    map.setFilter('taluks-hover', ['==', 'KGISTalukN', p.KGISTalukN]);
+    popup.setLngLat(e.lngLat).setHTML(`
+      <div class="popup-header">
+        <h3>🌿 ${p.KGISTalukN}</h3>
+        <p>${currentDistrict} District • Karnataka</p>
+      </div>
+      <div class="popup-body">
+        <div class="popup-row"><span class="key">Area</span><span class="val">${fmt(p.SHAPE_STAr,0)} m²</span></div>
+        <div class="popup-row"><span class="key">Health Score</span><span class="val">${fmt(p.Biodiversity_Health_Score)}</span></div>
+        <div class="popup-row"><span class="key">Risk Score</span><span class="val">${fmt(p.Biodiversity_Risk_Score)}</span></div>
+        <div class="popup-row"><span class="key">Climate Stress</span><span class="val">${fmt(p.Climate_Stress_Index)}</span></div>
+        <div class="popup-row"><span class="key">Health Class</span><span class="val"><span class="${getBadgeClass(p.Health_Class)}">${p.Health_Class||'N/A'}</span></span></div>
+        <div class="popup-row"><span class="key">Risk Class</span><span class="val"><span class="${getBadgeClass(p.Risk_Class)}">${p.Risk_Class||'N/A'}</span></span></div>
+        <div class="popup-row"><span class="key">State Rank</span><span class="val">#${p.State_Hotspot_Rank||'N/A'}</span></div>
+        <div class="popup-row"><span class="key">District Rank</span><span class="val">#${p.District_Hotspot_Rank||'N/A'}</span></div>
+        <div class="popup-row"><span class="key">NDVI</span><span class="val">${fmt(p.NDVI,4)}</span></div>
+        <div class="popup-row"><span class="key">Forest Cover</span><span class="val">${fmt(p.ForestCover,4)}</span></div>
+        <div class="popup-row"><span class="key">Water Occurrence</span><span class="val">${fmt(p.WaterOccurrence,2)}</span></div>
+        <div class="popup-row"><span class="key">Rainfall</span><span class="val">${fmt(p.Rainfall,1)} mm</span></div>
+        <div class="popup-row"><span class="key">LST</span><span class="val">${fmt(p.LST,2)} °C</span></div>
+        <div class="popup-row"><span class="key">Night Lights</span><span class="val">${fmt(p.NightLights,4)}</span></div>
+      </div>
+      <div class="popup-hint">⬇️ Double-click to download CSV</div>
+    `).addTo(map);
+  });
+
+  map.on('mouseleave', 'taluks-fill', () => {
+    map.getCanvas().style.cursor = '';
+    map.setFilter('taluks-hover', ['==', 'KGISTalukN', '']);
+    popup.remove();
+  });
+
+  // Double click → download taluk CSV
+  map.on('dblclick', 'taluks-fill', (e) => {
+    e.preventDefault();
+    downloadTalukData(e.features[0].properties);
+  });
+}
+
+function removeTalukLayer() {
+  ['taluks-hover','taluks-border','taluks-fill'].forEach(id => {
+    if (map.getLayer(id)) map.removeLayer(id);
+  });
+  if (map.getSource('taluks')) map.removeSource('taluks');
+}
+
+// ---- BACK BUTTON ----
+function goBack() {
+  currentLevel = 'district';
+  currentDistrict = null;
+  removeTalukLayer();
+  popup.remove();
+  document.getElementById('back-btn').style.display = 'none';
+  document.getElementById('level-indicator').textContent = '🌍 Karnataka Overview';
+  document.getElementById('hint-box').textContent = 'Hover over district  •  Click to explore taluks  •  Double-click to download';
+  document.getElementById('district-select').value = '';
+  map.flyTo({ center: [75.5, 15.0], zoom: 6.3, duration: 1000 });
+}
+
+// ---- POPULATE DISTRICT DROPDOWN ----
+function populateDistrictDropdown() {
+  const sel = document.getElementById('district-select');
+  const names = districtData.features.map(f => f.properties.ADM2_NAME).filter(Boolean).sort();
+  names.forEach(n => {
+    const opt = document.createElement('option');
+    opt.value = n; opt.textContent = n; sel.appendChild(opt);
+  });
+
+  sel.addEventListener('change', () => {
+    const val = sel.value;
+    if (!val) { goBack(); return; }
+    currentDistrict = val;
+    if (currentLevel === 'taluk') { removeTalukLayer(); currentLevel = 'district'; }
+    const feat = districtData.features.find(f => f.properties.ADM2_NAME === val);
+    if (feat) zoomToDistrict(feat);
+  });
+}
+
+// ---- TALUK SEARCH WITH DROPDOWN ----
+function setupTalukSearch() {
+  const input = document.getElementById('taluk-search');
+  const box   = document.getElementById('taluk-suggestions');
+
+  input.addEventListener('input', () => {
+    const q = input.value.toLowerCase().trim();
+    if (!q) { box.style.display = 'none'; return; }
+
+    const matches = talukData.features
+      .filter(f => f.properties.KGISTalukN && f.properties.KGISTalukN.toLowerCase().includes(q))
+      .slice(0, 8);
+
+    if (!matches.length) { box.style.display = 'none'; return; }
+
+    box.style.display = 'block';
+    box.innerHTML = matches.map(f => `
+      <div class="taluk-suggestion" data-name="${f.properties.KGISTalukN}" data-dist="${f.properties.KGISDistri}">
+        <span>🌿 ${f.properties.KGISTalukN}</span>
+        <span class="dist-tag">${getDistrictName(parseInt(f.properties.KGISDistri))}</span>
+      </div>
+    `).join('');
+
+    box.querySelectorAll('.taluk-suggestion').forEach(item => {
+      item.addEventListener('click', () => {
+        const name = item.dataset.name;
+        const dn   = parseInt(item.dataset.dist);
+        input.value = name;
+        box.style.display = 'none';
+
+        currentDistrict = getDistrictName(dn);
+        if (currentLevel === 'taluk') { removeTalukLayer(); currentLevel = 'district'; }
+
+        const match = talukData.features.find(f => f.properties.KGISTalukN === name);
+        if (!match) return;
+
+        // Directly zoom to taluk (skip district step)
+        const bounds = getBounds(match.geometry);
+        map.fitBounds(bounds, { padding: 100, duration: 1500 });
+        setTimeout(() => {
+          showTalukLayer();
+          document.getElementById('level-indicator').textContent = '🌿 ' + name + ' — ' + currentDistrict;
+          document.getElementById('back-btn').style.display = 'block';
+          document.getElementById('hint-box').textContent = 'Hover taluk for data  •  Double-click to download CSV';
+          currentLevel = 'taluk';
+        }, 1600);
+      });
+    });
+  });
+
+  // Close on outside click
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest('#taluk-search') && !e.target.closest('#taluk-suggestions')) {
+      box.style.display = 'none';
+    }
+  });
+}
+
+// ---- FILTERS ----
+function setupFilters() {
+  document.querySelectorAll('[data-health]').forEach(tag => {
+    tag.addEventListener('click', () => {
+      const cls = tag.dataset.health;
+      if (activeHealthFilters.has(cls)) { activeHealthFilters.delete(cls); tag.classList.replace('active','inactive'); }
+      else { activeHealthFilters.add(cls); tag.classList.replace('inactive','active'); }
+    });
+  });
+
+  document.querySelectorAll('[data-risk]').forEach(tag => {
+    tag.addEventListener('click', () => {
+      const cls = tag.dataset.risk;
+      if (activeRiskFilters.has(cls)) { activeRiskFilters.delete(cls); tag.classList.replace('active','inactive'); }
+      else { activeRiskFilters.add(cls); tag.classList.replace('inactive','active'); }
+    });
+  });
+}
+
+// ---- TOGGLES ----
+function setupToggles() {
+  document.getElementById('toggle-tooltip').addEventListener('change', e => { showTooltip = e.target.checked; });
+
+  document.getElementById('toggle-boundaries').addEventListener('change', e => {
+    const vis = e.target.checked ? 'visible' : 'none';
+    ['districts-border','taluks-border'].forEach(id => {
+      if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', vis);
+    });
+  });
+}
+
+// ---- STATS ----
+function updateStats() {
+  const good     = talukData.features.filter(f => f.properties.Health_Class === 'Good').length;
+  const critical = talukData.features.filter(f => f.properties.Health_Class === 'Critical').length;
+  document.getElementById('stat-good').textContent     = good;
+  document.getElementById('stat-critical').textContent = critical;
+}
+
+// ---- DOWNLOAD FUNCTIONS ----
+function downloadTalukData(p) {
+  const rows = [
+    ['Field','Value'],
+    ['District', currentDistrict||'N/A'],
+    ['Taluk', p.KGISTalukN||'N/A'],
+    ['Area (m²)', fmt(p.SHAPE_STAr,0)],
+    ['Biodiversity Health Score', fmt(p.Biodiversity_Health_Score)],
+    ['Biodiversity Risk Score', fmt(p.Biodiversity_Risk_Score)],
+    ['Climate Stress Index', fmt(p.Climate_Stress_Index)],
+    ['Health Class', p.Health_Class||'N/A'],
+    ['Risk Class', p.Risk_Class||'N/A'],
+    ['State Hotspot Rank', p.State_Hotspot_Rank||'N/A'],
+    ['District Hotspot Rank', p.District_Hotspot_Rank||'N/A'],
+    ['NDVI', fmt(p.NDVI,6)],
+    ['Forest Cover', fmt(p.ForestCover,6)],
+    ['Water Occurrence', fmt(p.WaterOccurrence,4)],
+    ['Rainfall (mm)', fmt(p.Rainfall,2)],
+    ['LST (°C)', fmt(p.LST,4)],
+    ['Night Lights', fmt(p.NightLights,6)]
+  ];
+  triggerDownload(rows.map(r=>r.join(',')).join('\n'), `${p.KGISTalukN}_data.csv`);
+}
+
+function downloadDistrictData(p) {
+  const rows = [
+    ['Field','Value'],
+    ['District', p.ADM2_NAME||'N/A'],
+    ['Total Taluks', p.Total_Taluks||'N/A'],
+    ['Avg Health Score', fmt(p.Biodiversity_Health_Score)],
+    ['Avg Risk Score', fmt(p.Biodiversity_Risk_Score)],
+    ['Avg Climate Stress', fmt(p.Climate_Stress_Index)],
+    ['Health Class', p.Health_Class||'N/A'],
+    ['Risk Class', p.Risk_Class||'N/A'],
+    ['Avg NDVI', fmt(p.NDVI,4)],
+    ['Avg Forest Cover', fmt(p.ForestCover,4)],
+    ['Avg Water Occurrence', fmt(p.WaterOccurrence,2)],
+    ['Avg Rainfall (mm)', fmt(p.Rainfall,2)],
+    ['Avg LST (°C)', fmt(p.LST,2)],
+    ['Avg Night Lights', fmt(p.NightLights,4)]
+  ];
+  triggerDownload(rows.map(r=>r.join(',')).join('\n'), `${p.ADM2_NAME}_district_data.csv`);
+}
+
+function triggerDownload(csv, filename) {
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  a.click();
+}
+
+// ---- START ----
+async function main() {
+  await loadData();
+  initMap();
+}
+main();
+</script>
+</body>
+</html>
